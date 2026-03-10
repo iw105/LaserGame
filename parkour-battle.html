@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LASERRUN — Multiplayer Parkour Battle</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#0a0a0f;color:#fff;font-family:'Share Tech Mono',monospace;overflow:hidden;user-select:none;}
+  #ui{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;}
+  #menu,#lobby,#gameover{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,5,15,0.95);z-index:20;pointer-events:all;}
+  h1{font-family:'Orbitron',monospace;font-size:clamp(2rem,6vw,5rem);font-weight:900;letter-spacing:.2em;
+    background:linear-gradient(90deg,#ff2244,#ff6600,#ffcc00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    text-shadow:0 0 40px rgba(255,50,50,0.5);margin-bottom:.3em;}
+  .subtitle{color:#ff4444;font-size:.9rem;letter-spacing:.3em;margin-bottom:2.5em;opacity:.8;}
+  .btn{font-family:'Orbitron',monospace;font-size:1rem;letter-spacing:.15em;padding:.8em 2.5em;border:2px solid #ff2244;
+    background:transparent;color:#ff2244;cursor:pointer;pointer-events:all;transition:all .2s;margin:.4em;text-transform:uppercase;}
+  .btn:hover{background:#ff2244;color:#fff;box-shadow:0 0 20px #ff2244;}
+  .btn.green{border-color:#00ff88;color:#00ff88;}
+  .btn.green:hover{background:#00ff88;color:#000;}
+  input{font-family:'Share Tech Mono',monospace;font-size:1rem;padding:.6em 1.2em;background:rgba(255,255,255,.05);
+    border:1px solid #444;border-bottom:2px solid #ff2244;color:#fff;outline:none;width:260px;text-align:center;margin:.4em;}
+  input:focus{border-bottom-color:#ffcc00;}
+  .label{font-size:.75rem;letter-spacing:.2em;color:#888;margin-bottom:.3em;}
+  #playerlist{list-style:none;margin:1em 0;min-height:80px;width:280px;}
+  #playerlist li{padding:.4em .8em;border-left:3px solid;font-size:.85rem;margin:.2em 0;}
+  #hud{position:fixed;top:0;left:0;width:100%;padding:.6em 1em;display:flex;justify-content:space-between;align-items:center;
+    background:linear-gradient(rgba(0,0,0,.7),transparent);z-index:11;pointer-events:none;}
+  #roundinfo{font-family:'Orbitron',monospace;font-size:.85rem;color:#ffcc00;letter-spacing:.1em;}
+  #laserinfo{font-size:.75rem;color:#ff4444;animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+  #controls-hint{position:fixed;bottom:1em;left:50%;transform:translateX(-50%);font-size:.7rem;color:#555;letter-spacing:.1em;z-index:11;}
+  #spectator-label{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Orbitron',monospace;
+    font-size:1.2rem;color:#aaa;letter-spacing:.2em;pointer-events:none;z-index:12;display:none;}
+  canvas{display:block;}
+  .room-code{font-family:'Orbitron',monospace;font-size:1.5rem;color:#00ff88;letter-spacing:.3em;margin:.5em;
+    padding:.4em .8em;border:1px solid #00ff88;background:rgba(0,255,136,.05);}
+  .error{color:#ff4444;font-size:.8rem;min-height:1.2em;margin:.3em;}
+  #winner-text{font-family:'Orbitron',monospace;font-size:clamp(1.5rem,4vw,3rem);font-weight:900;color:#ffcc00;
+    text-shadow:0 0 30px #ffcc00;margin-bottom:.5em;}
+  #stats{font-size:.85rem;color:#aaa;margin:1em;line-height:2em;}
+  #connecting{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Orbitron',monospace;
+    color:#00ff88;font-size:1rem;letter-spacing:.2em;z-index:30;display:none;}
+  .spinner{display:inline-block;width:12px;height:12px;border:2px solid #00ff88;border-top-color:transparent;
+    border-radius:50%;animation:spin .6s linear infinite;margin-right:8px;vertical-align:middle;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #debug{position:fixed;bottom:3em;right:1em;font-size:.65rem;color:#333;z-index:15;pointer-events:none;}
+</style>
+</head>
+<body>
+
+<!-- MENU -->
+<div id="menu">
+  <h1>LASERRUN</h1>
+  <div class="subtitle">MULTIPLAYER PARKOUR BATTLE</div>
+  <button class="btn green" onclick="showHost()">HOST GAME</button>
+  <button class="btn" onclick="showJoin()">JOIN GAME</button>
+  <button class="btn" onclick="startSolo()">SOLO PRACTICE</button>
+  <div style="margin-top:2em;font-size:.7rem;color:#444;letter-spacing:.1em;">
+    P1: WASD + F&nbsp;&nbsp;|&nbsp;&nbsp;P2: ARROWS + ENTER &nbsp;&nbsp;|&nbsp;&nbsp;GRAPPLE: Q / P
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby" style="display:none;">
+  <h1>LASERRUN</h1>
+  <div id="lobby-title" class="subtitle">LOBBY</div>
+  <div id="room-display" style="display:none;">
+    <div class="label">ROOM CODE — SHARE WITH FRIENDS</div>
+    <div class="room-code" id="room-code-text">----</div>
+  </div>
+  <div id="join-input" style="display:none;text-align:center;">
+    <div class="label">ENTER ROOM CODE</div>
+    <input id="code-input" maxlength="4" placeholder="XXXX" oninput="this.value=this.value.toUpperCase()">
+  </div>
+  <div style="margin-top:.5em;">
+    <div class="label">YOUR NAME</div>
+    <input id="name-input" maxlength="12" placeholder="PLAYER" value="PLAYER">
+  </div>
+  <div class="error" id="lobby-error"></div>
+  <div class="label" style="margin-top:1em;">PLAYERS IN ROOM</div>
+  <ul id="playerlist"></ul>
+  <button class="btn green" id="lobby-btn" onclick="lobbyAction()">CONNECT</button>
+  <button class="btn" onclick="backToMenu()">BACK</button>
+  <div id="connecting"><span class="spinner"></span>CONNECTING...</div>
+</div>
+
+<!-- GAMEOVER -->
+<div id="gameover" style="display:none;">
+  <h1>LASERRUN</h1>
+  <div id="winner-text">WINNER</div>
+  <div id="stats"></div>
+  <button class="btn green" onclick="playAgain()">PLAY AGAIN</button>
+  <button class="btn" onclick="backToMenu()">MENU</button>
+</div>
+
+<!-- HUD -->
+<div id="hud" style="display:none;">
+  <div id="roundinfo">ROUND 1</div>
+  <div id="laserinfo">⚠ LASER APPROACHING</div>
+</div>
+<div id="spectator-label">👁 SPECTATING</div>
+<div id="controls-hint">WASD/ARROWS: MOVE · F/ENTER: ATTACK · Q/P: GRAPPLE · SHIFT/CTRL: DASH</div>
+<div id="debug"></div>
+
+<canvas id="c"></canvas>
+
+<script>
+// ============================================================
+//  LASERRUN — Complete Multiplayer Parkour Battle
+//  Single-file, GitHub Pages compatible
+//  Multiplayer via PeerJS (WebRTC)
+// ============================================================
+
+// ---- PeerJS loader ----
+(function(){
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
+  s.onload = () => { window._peerReady = true; };
+  document.head.appendChild(s);
+})();
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ---- Resize ----
+function resize(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const GRAVITY = 0.55;
+const PLAYER_W = 28, PLAYER_H = 36;
+const JUMP_FORCE = -13.5;
+const WALL_JUMP_VX = 9;
+const MOVE_SPEED = 5.5;
+const DASH_SPEED = 16;
+const DASH_DUR = 120; // ms
+const DASH_CD = 1200;
+const GRAPPLE_SPEED = 18;
+const GRAPPLE_LEN = 220;
+const ATTACK_RANGE = 55;
+const ATTACK_DUR = 200;
+const ATTACK_CD = 500;
+const KNOCKBACK = 18;
+const LASER_INIT_X = -300; // world x start
+const LASER_ACCEL = 0.008;
+const PLATFORM_BREAK_HITS = 3;
+const POWERUP_TYPES = ['speed','doublejump','invincible'];
+const COLORS = ['#00e5ff','#ff2244','#aaff00','#ff9900'];
+const NAMES_DEFAULT = ['CYAN','RED','LIME','ORANGE'];
+
+// ============================================================
+// WORLD / MAP GENERATION
+// ============================================================
+const TILE = 32;
+const WORLD_W = 8000;
+const WORLD_H = 1200;
+
+let platforms = [];
+let powerupSpawns = [];
+let worldSeed = 0;
+
+function seededRand(seed){
+  let s = seed;
+  return function(){
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+function generateMap(seed){
+  const rng = seededRand(seed);
+  platforms = [];
+  powerupSpawns = [];
+
+  // Ground section (dense, left side)
+  // Spawn platform
+  platforms.push({x:100,y:700,w:300,h:20,hp:999,maxHp:999,type:'solid',orig:{x:100,y:700,w:300,h:20}});
+
+  // Dense zone 0-2000
+  for(let i=0;i<60;i++){
+    const x = 200 + rng()*1800;
+    const y = 300 + rng()*400;
+    const w = 80 + rng()*160;
+    platforms.push({x,y,w,h:20,hp:PLATFORM_BREAK_HITS,maxHp:PLATFORM_BREAK_HITS,type:'break',orig:{x,y,w,h:20}});
+  }
+  // Mid zone 2000-5000 (medium density)
+  for(let i=0;i<50;i++){
+    const x = 2000 + rng()*3000;
+    const y = 200 + rng()*500;
+    const w = 60 + rng()*120;
+    const t = rng()<.3?'break':'solid';
+    platforms.push({x,y,w,h:20,hp:t==='break'?PLATFORM_BREAK_HITS:999,maxHp:t==='break'?PLATFORM_BREAK_HITS:999,type:t,orig:{x,y,w,h:20}});
+  }
+  // Sparse zone 5000-8000
+  for(let i=0;i<25;i++){
+    const x = 5000 + rng()*2800;
+    const y = 150 + rng()*550;
+    const w = 50 + rng()*80;
+    platforms.push({x,y,w,h:20,hp:PLATFORM_BREAK_HITS,maxHp:PLATFORM_BREAK_HITS,type:'break',orig:{x,y,w,h:20}});
+  }
+  // Sort by x
+  platforms.sort((a,b)=>a.x-b.x);
+
+  // Powerup spawn points
+  for(let i=0;i<30;i++){
+    powerupSpawns.push({x:300+rng()*7000,y:rng()<.5?100:300});
+  }
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let gameState = 'menu'; // menu|lobby|playing|gameover
+let players = {};
+let localId = null;
+let isHost = false;
+let roomCode = '';
+let round = 1;
+let powerups = [];
+let particles = [];
+let camera = {x:0,y:0,shake:0};
+let laserX = LASER_INIT_X;
+let laserSpeed = 1.2;
+let gameTime = 0;
+let lastTime = 0;
+let spectating = false;
+let spectateTarget = null;
+let roundWinner = null;
+let scores = {};
+
+// ============================================================
+// PLAYER FACTORY
+// ============================================================
+function makePlayer(id, name, colorIdx, x, y, isLocal){
+  return {
+    id, name, colorIdx,
+    x, y, vx:0, vy:0,
+    w:PLAYER_W, h:PLAYER_H,
+    onGround:false,
+    onWall:0, // -1 left, 0 none, 1 right
+    alive:true,
+    jumpsLeft:2,
+    dashing:false, dashTimer:0, dashCd:0,
+    attacking:false, attackTimer:0, attackCd:0,
+    grappling:false, grappleX:0, grappleY:0, grappleActive:false,
+    grappleVel:{x:0,y:0},
+    powerup:null, powerupTimer:0,
+    invincible:false,
+    wallStick:0,
+    facingRight:true,
+    isLocal,
+    kills:0, deaths:0,
+    lastHitBy:null,
+    // animation
+    frame:0, frameTimer:0,
+    trail:[],
+    // input snapshot for networking
+    input:{left:false,right:false,jump:false,attack:false,grapple:false,dash:false,grappleAngle:0},
+  };
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+const keys = {};
+window.addEventListener('keydown', e=>{
+  keys[e.code] = true;
+  // prevent scroll
+  if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e=>{ keys[e.code] = false; });
+
+function getInput(playerIdx){
+  if(playerIdx===0) return {
+    left: !!keys['KeyA'],
+    right: !!keys['KeyD'],
+    jump: !!keys['KeyW'] || !!keys['Space'],
+    attack: !!keys['KeyF'],
+    grapple: !!keys['KeyQ'],
+    dash: !!keys['ShiftLeft'] || !!keys['ShiftRight'],
+    grappleAngle: Math.atan2(mouseY-canvas.height/2, mouseX-canvas.width/2),
+  };
+  if(playerIdx===1) return {
+    left: !!keys['ArrowLeft'],
+    right: !!keys['ArrowRight'],
+    jump: !!keys['ArrowUp'],
+    attack: !!keys['Return'] || !!keys['NumpadEnter'],
+    grapple: !!keys['KeyP'],
+    dash: !!keys['ControlRight'] || !!keys['ControlLeft'],
+    grappleAngle: 0,
+  };
+  return {left:false,right:false,jump:false,attack:false,grapple:false,dash:false,grappleAngle:0};
+}
+
+let mouseX=0, mouseY=0;
+window.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;});
+
+// edge-trigger helpers
+const _prev = {};
+function pressed(code){ const v = !!keys[code]; const p = !!_prev[code]; _prev[code]=v; return v&&!p; }
+// We handle jumps/dashes per player using per-player state instead of global pressed
+
+// ============================================================
+// PHYSICS & COLLISION
+// ============================================================
+function rectOverlap(ax,ay,aw,ah,bx,by,bw,bh){
+  return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
+}
+
+function resolvePlayerPlatform(p){
+  if(!p.alive) return;
+  const prevY = p.y - p.vy;
+  p.onGround = false;
+  p.onWall = 0;
+
+  for(const plat of platforms){
+    if(plat.hp<=0) continue;
+    // Only solid platforms block; breakable ones too
+    const px=plat.x, py=plat.y, pw=plat.w, ph=plat.h;
+
+    if(!rectOverlap(p.x,p.y,p.w,p.h,px,py,pw,ph)) continue;
+
+    // Compute overlap on each side
+    const overlapLeft  = (p.x+p.w) - px;
+    const overlapRight = (px+pw) - p.x;
+    const overlapTop   = (p.y+p.h) - py;
+    const overlapBottom= (py+ph) - p.y;
+
+    const minH = Math.min(overlapLeft, overlapRight);
+    const minV = Math.min(overlapTop, overlapBottom);
+
+    if(minV < minH){
+      if(overlapTop < overlapBottom){
+        // landing on top
+        if(p.vy >= 0){
+          p.y = py - p.h;
+          p.vy = 0;
+          p.onGround = true;
+          p.jumpsLeft = p.powerup==='doublejump' ? 3 : 2;
+          p.wallStick = 0;
+          // damage breaking platform
+          if(plat.type==='break' && p.vy >= 8){
+            damagePlatform(plat, 1);
+          }
+        }
+      } else {
+        // hitting underside
+        if(p.vy < 0){
+          p.y = py + ph;
+          p.vy = 0;
+        }
+      }
+    } else {
+      if(overlapLeft < overlapRight){
+        p.x = px - p.w;
+        if(p.vx>0) p.vx=0;
+        p.onWall = 1;
+      } else {
+        p.x = px + pw;
+        if(p.vx<0) p.vx=0;
+        p.onWall = -1;
+      }
+      p.wallStick = 60; // frames can wall-jump
+    }
+  }
+}
+
+function damagePlatform(plat, dmg){
+  plat.hp -= dmg;
+  spawnParticles(plat.x+plat.w/2, plat.y, 6, '#aa8844');
+  if(plat.hp<=0){
+    spawnParticles(plat.x+plat.w/2, plat.y, 20, '#cc9944');
+    // schedule respawn
+    plat._respawnTimer = 600; // frames
+  }
+}
+
+// ============================================================
+// PLAYER UPDATE
+// ============================================================
+const jumpPressed = {}; // per-player jump edge detect
+const grapplePressed = {};
+const dashPressed = {};
+const attackPressed = {};
+
+function updatePlayer(p, input, dt){
+  if(!p.alive) return;
+
+  const spd = p.powerup==='speed' ? MOVE_SPEED*1.6 : MOVE_SPEED;
+
+  // Dash
+  if(input.dash && !dashPressed[p.id] && p.dashCd<=0 && !p.dashing){
+    dashPressed[p.id]=true;
+    p.dashing=true;
+    p.dashTimer=DASH_DUR;
+    p.dashCd=DASH_CD;
+    const dx = input.right ? 1 : input.left ? -1 : (p.facingRight?1:-1);
+    p.vx = dx * DASH_SPEED;
+    p.vy *= 0.3;
+    spawnParticles(p.x+p.w/2,p.y+p.h/2,12,COLORS[p.colorIdx]);
+  }
+  if(!input.dash) dashPressed[p.id]=false;
+  if(p.dashCd>0) p.dashCd -= dt;
+  if(p.dashing){
+    p.dashTimer -= dt;
+    if(p.dashTimer<=0){ p.dashing=false; }
+  }
+
+  // Horizontal movement (not during dash)
+  if(!p.dashing){
+    if(input.left){ p.vx += (-spd - p.vx)*0.3; p.facingRight=false; }
+    else if(input.right){ p.vx += (spd - p.vx)*0.3; p.facingRight=true; }
+    else { p.vx *= p.onGround?0.75:0.92; }
+  }
+
+  // Jump / wall jump
+  const jumpNow = input.jump;
+  if(jumpNow && !jumpPressed[p.id]){
+    jumpPressed[p.id]=true;
+    if(p.onGround){
+      p.vy = JUMP_FORCE;
+      p.jumpsLeft--;
+    } else if(p.onWall!==0 && p.wallStick>0){
+      p.vy = JUMP_FORCE * 0.9;
+      p.vx = -p.onWall * WALL_JUMP_VX;
+      p.wallStick=0;
+    } else if(p.jumpsLeft>0){
+      p.vy = JUMP_FORCE * 0.85;
+      p.jumpsLeft--;
+    }
+  }
+  if(!jumpNow) jumpPressed[p.id]=false;
+
+  // Wall slide (slow fall on wall)
+  if(p.onWall!==0 && !p.onGround && p.vy>0 && p.wallStick>0){
+    p.vy = Math.min(p.vy, 2.5);
+  }
+  if(p.wallStick>0) p.wallStick--;
+
+  // Grapple
+  const grapNow = input.grapple;
+  if(grapNow && !grapplePressed[p.id]){
+    grapplePressed[p.id]=true;
+    if(!p.grappling){
+      p.grappling=true;
+      p.grappleActive=false;
+      // shoot in facing or mouse dir
+      const ang = input.grappleAngle || (p.facingRight ? -0.3 : Math.PI+0.3);
+      p.grappleVel = {x:Math.cos(ang)*GRAPPLE_SPEED, y:Math.sin(ang)*GRAPPLE_SPEED};
+      p.grappleX = p.x+p.w/2;
+      p.grappleY = p.y+p.h/2;
+    } else {
+      p.grappling=false;
+      p.grappleActive=false;
+    }
+  }
+  if(!grapNow) grapplePressed[p.id]=false;
+
+  if(p.grappling && !p.grappleActive){
+    p.grappleX += p.grappleVel.x;
+    p.grappleY += p.grappleVel.y;
+    const px=p.x+p.w/2, py=p.y+p.h/2;
+    const dist=Math.hypot(p.grappleX-px,p.grappleY-py);
+    if(dist>GRAPPLE_LEN){ p.grappling=false; }
+    // Check hit platform
+    for(const plat of platforms){
+      if(plat.hp<=0) continue;
+      if(rectOverlap(p.grappleX-4,p.grappleY-4,8,8,plat.x,plat.y,plat.w,plat.h)){
+        p.grappleActive=true;
+        break;
+      }
+    }
+  }
+  if(p.grappling && p.grappleActive){
+    const px=p.x+p.w/2, py=p.y+p.h/2;
+    const dx=p.grappleX-px, dy=p.grappleY-py;
+    const dist=Math.hypot(dx,dy);
+    if(dist>10){
+      p.vx += (dx/dist)*1.5;
+      p.vy += (dy/dist)*1.5;
+    } else {
+      p.grappling=false;
+      p.grappleActive=false;
+    }
+  }
+
+  // Attack
+  const atkNow = input.attack;
+  if(atkNow && !attackPressed[p.id] && p.attackCd<=0){
+    attackPressed[p.id]=true;
+    p.attacking=true;
+    p.attackTimer=ATTACK_DUR;
+    p.attackCd=ATTACK_CD;
+    // Check hit other players
+    for(const oid in players){
+      const o=players[oid];
+      if(o.id===p.id||!o.alive||o.invincible) continue;
+      const dx=(o.x+o.w/2)-(p.x+p.w/2);
+      const dy=(o.y+o.h/2)-(p.y+p.h/2);
+      const dist=Math.hypot(dx,dy);
+      if(dist<ATTACK_RANGE){
+        o.vx += (dx/dist)*KNOCKBACK*(1+(Math.abs(p.vx)*0.1));
+        o.vy += -8 + (dy/dist)*6;
+        o.lastHitBy=p.id;
+        spawnParticles(o.x+o.w/2,o.y+o.h/2,16,COLORS[p.colorIdx]);
+        camera.shake=12;
+        // damage breakable platform under attack
+        for(const plat of platforms){
+          if(plat.type==='break'&&plat.hp>0&&rectOverlap(o.x,o.y,o.w,o.h,plat.x,plat.y,plat.w,plat.h)){
+            damagePlatform(plat,1);
+          }
+        }
+        sendNetEvent({type:'hit',victim:o.id,vx:o.vx,vy:o.vy,attacker:p.id});
+      }
+    }
+  }
+  if(!atkNow) attackPressed[p.id]=false;
+  if(p.attackCd>0) p.attackCd-=dt;
+  if(p.attacking){ p.attackTimer-=dt; if(p.attackTimer<=0) p.attacking=false; }
+
+  // Gravity
+  if(!p.onGround) p.vy += GRAVITY;
+  p.vy = Math.min(p.vy, 28); // terminal velocity
+
+  // Integrate position - sub-step for safety
+  const STEPS=3;
+  for(let s=0;s<STEPS;s++){
+    p.x += p.vx/STEPS;
+    resolvePlayerPlatform(p);
+    p.y += p.vy/STEPS;
+    resolvePlayerPlatform(p);
+  }
+
+  // Powerup timer
+  if(p.powerup){
+    p.powerupTimer-=dt;
+    p.invincible = p.powerup==='invincible';
+    if(p.powerupTimer<=0){ p.powerup=null; p.invincible=false; }
+  }
+
+  // Trail
+  p.trail.unshift({x:p.x+p.w/2,y:p.y+p.h/2,t:Date.now()});
+  if(p.trail.length>12) p.trail.pop();
+
+  // Death check - fall off screen or hit laser
+  const cx = p.x+p.w/2;
+  if(p.y > WORLD_H+200 || cx < laserX+30 || p.x > WORLD_W+500){
+    killPlayer(p);
+  }
+}
+
+function killPlayer(p){
+  if(!p.alive) return;
+  p.alive=false;
+  p.deaths++;
+  if(p.lastHitBy && players[p.lastHitBy]){
+    players[p.lastHitBy].kills++;
+  }
+  spawnParticles(p.x+p.w/2,p.y+p.h/2,40,COLORS[p.colorIdx]);
+  camera.shake=20;
+  checkRoundEnd();
+}
+
+function checkRoundEnd(){
+  const alive = Object.values(players).filter(p=>p.alive);
+  if(alive.length<=1){
+    const winner = alive[0]||null;
+    if(winner){
+      if(!scores[winner.id]) scores[winner.id]=0;
+      scores[winner.id]++;
+      roundWinner=winner;
+    }
+    setTimeout(()=>endRound(),1500);
+  }
+}
+
+function endRound(){
+  // Check if someone has 3 wins
+  for(const id in scores){
+    if(scores[id]>=3){
+      showGameOver(id);
+      return;
+    }
+  }
+  round++;
+  startRound();
+}
+
+// ============================================================
+// POWERUPS
+// ============================================================
+function spawnPowerup(x,y){
+  const type=POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)];
+  powerups.push({x,y,type,anim:0,collected:false});
+}
+
+function updatePowerups(dt){
+  for(const pw of powerups){
+    if(pw.collected) continue;
+    pw.anim+=dt*0.003;
+    for(const id in players){
+      const p=players[id];
+      if(!p.alive) continue;
+      if(rectOverlap(p.x,p.y,p.w,p.h,pw.x-16,pw.y-16,32,32)){
+        p.powerup=pw.type;
+        p.powerupTimer=5000;
+        if(pw.type==='doublejump') p.jumpsLeft=3;
+        pw.collected=true;
+        spawnParticles(pw.x,pw.y,20,pw.type==='speed'?'#ffff00':pw.type==='doublejump'?'#00ffff':'#ff88ff');
+        break;
+      }
+    }
+  }
+  powerups=powerups.filter(p=>!p.collected);
+}
+
+// ============================================================
+// PARTICLES
+// ============================================================
+function spawnParticles(x,y,n,color){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2;
+    const spd=1+Math.random()*6;
+    particles.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd-2,life:1,color,size:2+Math.random()*4});
+  }
+}
+
+function updateParticles(dt){
+  for(const p of particles){
+    p.x+=p.vx;
+    p.y+=p.vy;
+    p.vy+=0.2;
+    p.life-=0.025;
+  }
+  particles=particles.filter(p=>p.life>0);
+}
+
+// ============================================================
+// PLATFORM RESPAWNING
+// ============================================================
+function updatePlatforms(dt){
+  for(const plat of platforms){
+    if(plat.hp<=0 && plat._respawnTimer>0){
+      plat._respawnTimer--;
+      if(plat._respawnTimer<=0){
+        plat.hp=plat.maxHp;
+      }
+    }
+  }
+}
+
+// ============================================================
+// LASER
+// ============================================================
+function updateLaser(dt){
+  laserSpeed += LASER_ACCEL * dt * 0.016;
+  laserX += laserSpeed * dt * 0.016 * 60;
+}
+
+// ============================================================
+// CAMERA
+// ============================================================
+function updateCamera(){
+  // Focus on local player or spectate target
+  let target = null;
+  if(localId && players[localId] && players[localId].alive){
+    target=players[localId];
+  } else {
+    // Spectate
+    const alive=Object.values(players).filter(p=>p.alive);
+    if(alive.length>0){
+      if(!spectateTarget || !players[spectateTarget]?.alive){
+        spectateTarget=alive[0].id;
+      }
+      target=players[spectateTarget];
+      spectating=true;
+      document.getElementById('spectator-label').style.display='block';
+    }
+  }
+  if(target){
+    spectating = !(localId && players[localId]?.alive);
+    if(!spectating) document.getElementById('spectator-label').style.display='none';
+    const tx=target.x+target.w/2-canvas.width/2;
+    const ty=target.y+target.h/2-canvas.height*0.45;
+    camera.x+=(tx-camera.x)*0.1;
+    camera.y+=(ty-camera.y)*0.1;
+  }
+  if(camera.shake>0){
+    camera.shake*=0.8;
+  }
+}
+
+// ============================================================
+// NETWORKING (PeerJS)
+// ============================================================
+let peer=null, connections=[];
+let isOnline=false;
+
+function initPeer(onOpen){
+  if(!window._peerReady){
+    setTimeout(()=>initPeer(onOpen),200);
+    return;
+  }
+  peer = new Peer(undefined,{debug:0});
+  peer.on('open',id=>{ onOpen(id); });
+  peer.on('connection',conn=>{ setupConn(conn); });
+  peer.on('error',e=>{ setError('Connection error: '+e.type); });
+}
+
+function setupConn(conn){
+  connections.push(conn);
+  conn.on('data',data=>handleNet(data,conn));
+  conn.on('close',()=>{
+    connections=connections.filter(c=>c!==conn);
+    if(isHost) broadcastExcept({type:'playerleft',id:conn.metadata?.pid},conn);
+    if(conn.metadata?.pid && players[conn.metadata?.pid]){
+      delete players[conn.metadata.pid];
+      refreshLobbyList();
+    }
+  });
+}
+
+function sendTo(conn, data){ try{ conn.send(data); }catch(e){} }
+function broadcast(data){ connections.forEach(c=>sendTo(c,data)); }
+function broadcastExcept(data,except){ connections.filter(c=>c!==except).forEach(c=>sendTo(c,data)); }
+function sendToHost(data){ if(connections[0]) sendTo(connections[0],data); }
+
+function sendNetEvent(data){
+  if(!isOnline) return;
+  if(isHost) broadcast(data);
+  else sendToHost(data);
+}
+
+function handleNet(data, conn){
+  switch(data.type){
+    case 'join': {
+      // Host receives join request
+      const pid = 'p'+(Date.now()%10000);
+      conn.metadata={pid};
+      const ci=Object.keys(players).length % COLORS.length;
+      players[pid]=makePlayer(pid,data.name,ci,200,600,false);
+      // Send full state to joiner
+      sendTo(conn,{type:'welcome',yourId:pid,players:serializePlayers(),round,seed:worldSeed,scores});
+      // Announce to others
+      broadcastExcept({type:'newplayer',id:pid,name:data.name,colorIdx:ci},conn);
+      refreshLobbyList();
+      break;
+    }
+    case 'welcome': {
+      localId=data.yourId;
+      round=data.round;
+      worldSeed=data.seed;
+      scores=data.scores||{};
+      generateMap(worldSeed);
+      for(const id in data.players){
+        const pd=data.players[id];
+        players[id]=makePlayer(id,pd.name,pd.colorIdx,pd.x,pd.y,id===localId);
+      }
+      if(!players[localId]) players[localId]=makePlayer(localId,'PLAYER',Object.keys(players).length%4,200,600,true);
+      refreshLobbyList();
+      setConnecting(false);
+      break;
+    }
+    case 'newplayer': {
+      const ci=data.colorIdx%COLORS.length;
+      players[data.id]=makePlayer(data.id,data.name,ci,200,600,false);
+      refreshLobbyList();
+      break;
+    }
+    case 'playerleft': {
+      delete players[data.id];
+      refreshLobbyList();
+      break;
+    }
+    case 'startgame': {
+      worldSeed=data.seed;
+      round=data.round||1;
+      scores=data.scores||{};
+      generateMap(worldSeed);
+      startRound();
+      break;
+    }
+    case 'state': {
+      // Authoritative state from host
+      if(data.players){
+        for(const id in data.players){
+          if(id===localId) continue; // don't overwrite local
+          const pd=data.players[id];
+          if(!players[id]) players[id]=makePlayer(id,pd.name||'?',pd.colorIdx||0,pd.x,pd.y,false);
+          const p=players[id];
+          p.x=lerp(p.x,pd.x,0.3);
+          p.y=lerp(p.y,pd.y,0.3);
+          p.vx=pd.vx; p.vy=pd.vy;
+          p.alive=pd.alive; p.facingRight=pd.facingRight;
+          p.attacking=pd.attacking; p.dashing=pd.dashing;
+          p.grappling=pd.grappling; p.grappleActive=pd.grappleActive;
+          p.grappleX=pd.grappleX; p.grappleY=pd.grappleY;
+          p.powerup=pd.powerup; p.kills=pd.kills; p.deaths=pd.deaths;
+        }
+      }
+      laserX=data.laserX;
+      break;
+    }
+    case 'input': {
+      // Host receives input from client
+      if(players[data.id]) players[data.id].input=data.input;
+      break;
+    }
+    case 'hit': {
+      const o=players[data.victim];
+      if(o){ o.vx=data.vx; o.vy=data.vy; o.lastHitBy=data.attacker; spawnParticles(o.x+o.w/2,o.y+o.h/2,16,COLORS[o.colorIdx]); }
+      break;
+    }
+    case 'laser': { laserX=data.x; break; }
+    case 'powerup': {
+      powerups.push({x:data.x,y:data.y,type:data.t,anim:0,collected:false});
+      break;
+    }
+    case 'plathit': {
+      const pl=platforms[data.idx];
+      if(pl) damagePlatform(pl,1);
+      break;
+    }
+    case 'roundstart': {
+      round=data.round;
+      scores=data.scores||scores;
+      resetRound(data.seed);
+      break;
+    }
+  }
+}
+
+function serializePlayers(){
+  const out={};
+  for(const id in players){
+    const p=players[id];
+    out[id]={name:p.name,colorIdx:p.colorIdx,x:p.x,y:p.y,vx:p.vx,vy:p.vy,
+      alive:p.alive,facingRight:p.facingRight,attacking:p.attacking,dashing:p.dashing,
+      grappling:p.grappling,grappleActive:p.grappleActive,grappleX:p.grappleX,grappleY:p.grappleY,
+      powerup:p.powerup,kills:p.kills,deaths:p.deaths};
+  }
+  return out;
+}
+
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+// Broadcast state at 20Hz if host
+let netTick=0;
+function netUpdate(dt){
+  if(!isOnline) return;
+  netTick+=dt;
+  if(isHost && netTick>50){
+    netTick=0;
+    broadcast({type:'state',players:serializePlayers(),laserX});
+  } else if(!isHost && netTick>50){
+    netTick=0;
+    if(localId && players[localId]){
+      sendToHost({type:'input',id:localId,input:players[localId].input});
+    }
+  }
+}
+
+// ============================================================
+// ROUND MANAGEMENT
+// ============================================================
+function resetRound(seed){
+  if(seed) worldSeed=seed;
+  generateMap(worldSeed);
+  laserX = LASER_INIT_X;
+  laserSpeed = 1.2;
+  powerups=[];
+  particles=[];
+  spectating=false;
+  spectateTarget=null;
+  roundWinner=null;
+
+  // Respawn all players
+  const ids=Object.keys(players);
+  ids.forEach((id,i)=>{
+    const p=players[id];
+    p.x=150+i*60; p.y=600;
+    p.vx=0; p.vy=0;
+    p.alive=true;
+    p.dashing=false; p.dashTimer=0; p.dashCd=0;
+    p.attacking=false; p.attackTimer=0; p.attackCd=0;
+    p.grappling=false; p.grappleActive=false;
+    p.powerup=null; p.powerupTimer=0; p.invincible=false;
+    p.jumpsLeft=2; p.wallStick=0; p.trail=[];
+  });
+  // Restore all platforms
+  for(const plat of platforms){ plat.hp=plat.maxHp; plat._respawnTimer=0; }
+  // Spawn initial powerups
+  powerupSpawns.slice(0,10).forEach(s=>spawnPowerup(s.x,s.y));
+}
+
+function startRound(){
+  resetRound(Math.floor(Math.random()*99999));
+  document.getElementById('roundinfo').textContent='ROUND '+round;
+  gameState='playing';
+  document.getElementById('hud').style.display='flex';
+  document.getElementById('menu').style.display='none';
+  document.getElementById('lobby').style.display='none';
+  document.getElementById('gameover').style.display='none';
+}
+
+function showGameOver(winnerId){
+  gameState='gameover';
+  const w=players[winnerId];
+  document.getElementById('winner-text').textContent=(w?w.name:'???')+' WINS!';
+  document.getElementById('winner-text').style.color=w?COLORS[w.colorIdx]:'#ffcc00';
+  let st='';
+  for(const id in players){
+    const p=players[id];
+    st+=`<span style="color:${COLORS[p.colorIdx]}">${p.name}</span>: ${scores[id]||0} wins · ${p.kills} kills · ${p.deaths} deaths<br>`;
+  }
+  document.getElementById('stats').innerHTML=st;
+  document.getElementById('gameover').style.display='flex';
+  document.getElementById('hud').style.display='none';
+}
+
+// ============================================================
+// DRAWING
+// ============================================================
+function drawBackground(){
+  // Parallax scrolling background
+  const grad=ctx.createLinearGradient(0,0,0,canvas.height);
+  grad.addColorStop(0,'#05050f');
+  grad.addColorStop(1,'#0a1020');
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Stars
+  ctx.fillStyle='rgba(255,255,255,0.4)';
+  const starSeed=42;
+  for(let i=0;i<120;i++){
+    const sx=((i*2347+starSeed)%WORLD_W);
+    const sy=((i*1913)%400);
+    const px=(sx-camera.x*0.05)%canvas.width;
+    const py=(sy-camera.y*0.02)%canvas.height;
+    ctx.fillRect(((px%canvas.width)+canvas.width)%canvas.width,((py%canvas.height)+canvas.height)%canvas.height,1,1);
+  }
+}
+
+function drawPlatforms(){
+  for(const plat of platforms){
+    if(plat.hp<=0) continue;
+    const sx=plat.x-camera.x, sy=plat.y-camera.y;
+    if(sx+plat.w<0||sx>canvas.width||sy+plat.h<0||sy>canvas.height) continue;
+
+    const ratio=plat.hp/plat.maxHp;
+    const baseColor= plat.type==='solid' ? '#2244aa' : '#553311';
+    const crackColor= '#ff4400';
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.4)';
+    ctx.fillRect(sx+4,sy+6,plat.w,plat.h);
+
+    // Body
+    ctx.fillStyle=plat.type==='solid'?'#334488':lerp_color('#886644','#cc4400',1-ratio);
+    ctx.fillRect(sx,sy,plat.w,plat.h);
+
+    // Top edge
+    ctx.fillStyle=plat.type==='solid'?'#5588cc':'#ffaa66';
+    ctx.fillRect(sx,sy,plat.w,3);
+
+    // Crack overlay
+    if(plat.type==='break' && ratio<1){
+      ctx.globalAlpha=1-ratio;
+      ctx.fillStyle='#000';
+      for(let i=0;i<(1-ratio)*5;i++){
+        const cx2=sx+10+i*(plat.w/5);
+        ctx.fillRect(cx2,sy,1,plat.h);
+      }
+      ctx.globalAlpha=1;
+    }
+  }
+}
+
+function lerp_color(a,b,t){
+  const ah=parseInt(a.slice(1),16), bh=parseInt(b.slice(1),16);
+  const ar=(ah>>16)&255,ag=(ah>>8)&255,ab=ah&255;
+  const br=(bh>>16)&255,bg=(bh>>8)&255,bb=bh&255;
+  return `rgb(${Math.round(ar+t*(br-ar))},${Math.round(ag+t*(bg-ag))},${Math.round(ab+t*(bb-ab))})`;
+}
+
+function drawPlayers(){
+  for(const id in players){
+    const p=players[id];
+    const sx=p.x-camera.x, sy=p.y-camera.y;
+    const col=COLORS[p.colorIdx];
+
+    // Trail
+    for(let i=0;i<p.trail.length;i++){
+      const t=p.trail[i];
+      const tx=t.x-camera.x, ty=t.y-camera.y;
+      const a=(1-i/p.trail.length)*0.3;
+      ctx.globalAlpha=a;
+      ctx.fillStyle=col;
+      const s=(1-i/p.trail.length)*p.w*0.5;
+      ctx.fillRect(tx-s/2,ty-s/2,s,s);
+    }
+    ctx.globalAlpha=1;
+
+    if(!p.alive) continue;
+
+    // Grapple line
+    if(p.grappling){
+      ctx.strokeStyle=col;
+      ctx.lineWidth=2;
+      ctx.globalAlpha=0.8;
+      ctx.beginPath();
+      ctx.moveTo(sx+p.w/2,sy+p.h/2);
+      ctx.lineTo(p.grappleX-camera.x,p.grappleY-camera.y);
+      ctx.stroke();
+      if(p.grappleActive){
+        ctx.fillStyle=col;
+        ctx.beginPath();
+        ctx.arc(p.grappleX-camera.x,p.grappleY-camera.y,5,0,Math.PI*2);
+        ctx.fill();
+      }
+      ctx.globalAlpha=1;
+    }
+
+    // Invincibility glow
+    if(p.invincible){
+      ctx.shadowColor='#ff88ff';
+      ctx.shadowBlur=20;
+    }
+
+    // Body
+    ctx.fillStyle=p.dashing?'#ffffff':col;
+    ctx.fillRect(sx,sy,p.w,p.h);
+
+    // Eye
+    ctx.fillStyle='#fff';
+    const eyeX=p.facingRight?sx+p.w-10:sx+4;
+    ctx.fillRect(eyeX,sy+8,6,5);
+    ctx.fillStyle='#000';
+    ctx.fillRect(p.facingRight?eyeX+2:eyeX,sy+9,3,3);
+
+    // Attack flash
+    if(p.attacking){
+      ctx.strokeStyle='#ffffff';
+      ctx.lineWidth=3;
+      ctx.globalAlpha=0.7;
+      const ax=p.facingRight?sx+p.w:sx;
+      ctx.beginPath();
+      ctx.arc(ax,sy+p.h/2,ATTACK_RANGE,p.facingRight?-Math.PI*0.6:Math.PI*0.4,p.facingRight?Math.PI*0.6:Math.PI*1.6);
+      ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+
+    ctx.shadowBlur=0;
+
+    // Powerup indicator
+    if(p.powerup){
+      ctx.fillStyle=p.powerup==='speed'?'#ffff00':p.powerup==='doublejump'?'#00ffff':'#ff88ff';
+      ctx.font='10px Share Tech Mono';
+      ctx.fillText(p.powerup==='speed'?'⚡':p.powerup==='doublejump'?'✦':'🛡',sx+p.w/2-6,sy-5);
+    }
+
+    // Name tag
+    ctx.fillStyle=col;
+    ctx.font='bold 11px Share Tech Mono';
+    ctx.textAlign='center';
+    ctx.fillText(p.name,sx+p.w/2,sy-12);
+    ctx.textAlign='left';
+  }
+}
+
+function drawPowerups(){
+  for(const pw of powerups){
+    const sx=pw.x-camera.x, sy=pw.y-camera.y+Math.sin(pw.anim)*6;
+    const col=pw.type==='speed'?'#ffff00':pw.type==='doublejump'?'#00ffff':'#ff88ff';
+    ctx.fillStyle=col;
+    ctx.shadowColor=col; ctx.shadowBlur=15;
+    ctx.beginPath();
+    ctx.arc(sx,sy,14,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.font='bold 13px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(pw.type==='speed'?'⚡':pw.type==='doublejump'?'✦':'★',sx,sy+5);
+    ctx.textAlign='left';
+    ctx.shadowBlur=0;
+  }
+}
+
+function drawParticles(){
+  for(const p of particles){
+    ctx.globalAlpha=p.life*0.9;
+    ctx.fillStyle=p.color;
+    ctx.fillRect(p.x-camera.x-p.size/2,p.y-camera.y-p.size/2,p.size,p.size);
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawLaser(){
+  const sx=laserX-camera.x;
+  // Glow layers
+  const glows=[{w:80,a:0.04},{w:40,a:0.1},{w:15,a:0.3},{w:5,a:1}];
+  for(const g of glows){
+    const grad=ctx.createLinearGradient(sx-g.w,0,sx,0);
+    grad.addColorStop(0,'transparent');
+    grad.addColorStop(1,`rgba(255,30,30,${g.a})`);
+    ctx.fillStyle=grad;
+    ctx.fillRect(sx-g.w,0,g.w,canvas.height);
+  }
+  // Hard edge
+  ctx.fillStyle='#ff2244';
+  ctx.fillRect(sx,0,4,canvas.height);
+  // Sparks
+  if(Math.random()<0.3){
+    spawnParticles(laserX+2,Math.random()*canvas.height+camera.y,2,'#ff4444');
+  }
+  // Label
+  ctx.fillStyle='#ff4444';
+  ctx.font='bold 11px Share Tech Mono';
+  ctx.fillText('▶ LASER',sx+8,canvas.height*0.5);
+}
+
+function drawHUD(){
+  // Player panels
+  let i=0;
+  for(const id in players){
+    const p=players[id];
+    const col=COLORS[p.colorIdx];
+    const x=10+i*170, y=40;
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(x,y,160,54);
+    ctx.strokeStyle=col; ctx.lineWidth=1.5;
+    ctx.strokeRect(x,y,160,54);
+    ctx.fillStyle=col;
+    ctx.font='bold 11px Orbitron,monospace';
+    ctx.fillText(p.name+(p.alive?'':' ✝'),x+8,y+18);
+    ctx.font='10px Share Tech Mono';
+    ctx.fillStyle='#aaa';
+    ctx.fillText(`K:${p.kills} D:${p.deaths} SC:${scores[id]||0}`,x+8,y+34);
+    // Ability bars
+    const dashPct=1-Math.min(1,p.dashCd/DASH_CD);
+    ctx.fillStyle='#333';
+    ctx.fillRect(x+8,y+43,144,6);
+    ctx.fillStyle='#00e5ff';
+    ctx.fillRect(x+8,y+43,144*dashPct,6);
+    i++;
+  }
+}
+
+// ============================================================
+// MAIN LOOP
+// ============================================================
+let powerupTimer=0;
+const POWERUP_INTERVAL=8000;
+
+function gameLoop(ts){
+  requestAnimationFrame(gameLoop);
+  const dt=Math.min(ts-lastTime,50);
+  lastTime=ts;
+
+  if(gameState!=='playing'){
+    // Draw static background
+    ctx.fillStyle='#05050f';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    return;
+  }
+
+  gameTime+=dt;
+
+  // Camera shake
+  const shakeX=camera.shake*(Math.random()-.5)*2;
+  const shakeY=camera.shake*(Math.random()-.5)*2;
+
+  // Update
+  updateLaser(dt);
+
+  for(const id in players){
+    const p=players[id];
+    if(!p.alive) continue;
+    // Gather input
+    if(p.isLocal){
+      // Find local player index
+      const localIdx=Object.keys(players).indexOf(id);
+      p.input=getInput(localIdx);
+    }
+    // Host simulates all; clients simulate only local
+    if(isHost||!isOnline||p.isLocal){
+      updatePlayer(p, p.input, dt);
+    }
+  }
+
+  updatePowerups(dt);
+  updateParticles(dt);
+  updatePlatforms(dt);
+
+  // Spawn powerups periodically (host only)
+  if(isHost||!isOnline){
+    powerupTimer+=dt;
+    if(powerupTimer>POWERUP_INTERVAL){
+      powerupTimer=0;
+      const sp=powerupSpawns[Math.floor(Math.random()*powerupSpawns.length)];
+      if(sp) spawnPowerup(sp.x,sp.y);
+      if(isOnline) broadcast({type:'powerup',x:sp.x,y:sp.y,t:powerups[powerups.length-1]?.type});
+    }
+  }
+
+  updateCamera();
+  netUpdate(dt);
+
+  // Draw
+  ctx.save();
+  ctx.translate(shakeX*camera.shake*0.05,shakeY*camera.shake*0.05);
+
+  drawBackground();
+
+  ctx.save();
+  ctx.translate(-camera.x,-camera.y);
+
+  // World bounds
+  ctx.strokeStyle='rgba(255,100,0,0.3)';
+  ctx.lineWidth=2;
+  ctx.strokeRect(0,-200,WORLD_W,WORLD_H+400);
+
+  drawPlatforms();
+  drawPowerups();
+  drawParticles();
+  drawPlayers();
+  ctx.restore();
+
+  drawLaser();
+  drawHUD();
+
+  // Round winner flash
+  if(roundWinner){
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle=COLORS[roundWinner.colorIdx];
+    ctx.font='bold 48px Orbitron,monospace';
+    ctx.textAlign='center';
+    ctx.fillText(roundWinner.name+' WINS ROUND!',canvas.width/2,canvas.height/2);
+    ctx.textAlign='left';
+  }
+
+  ctx.restore();
+}
+
+// ============================================================
+// UI LOGIC
+// ============================================================
+let lobbyMode='host';
+
+function showHost(){
+  lobbyMode='host';
+  document.getElementById('menu').style.display='none';
+  document.getElementById('lobby').style.display='flex';
+  document.getElementById('lobby-title').textContent='HOST LOBBY';
+  document.getElementById('room-display').style.display='none';
+  document.getElementById('join-input').style.display='none';
+  document.getElementById('lobby-btn').textContent='CREATE ROOM';
+}
+
+function showJoin(){
+  lobbyMode='join';
+  document.getElementById('menu').style.display='none';
+  document.getElementById('lobby').style.display='flex';
+  document.getElementById('lobby-title').textContent='JOIN GAME';
+  document.getElementById('room-display').style.display='none';
+  document.getElementById('join-input').style.display='block';
+  document.getElementById('lobby-btn').textContent='CONNECT';
+}
+
+function setConnecting(v){
+  document.getElementById('connecting').style.display=v?'block':'none';
+  document.getElementById('lobby-btn').style.display=v?'none':'block';
+}
+
+function setError(msg){
+  document.getElementById('lobby-error').textContent=msg;
+  setConnecting(false);
+}
+
+function lobbyAction(){
+  const name=document.getElementById('name-input').value.trim().toUpperCase()||'PLAYER';
+  if(lobbyMode==='host'){
+    isHost=true;
+    isOnline=true;
+    setConnecting(true);
+    initPeer(id=>{
+      // Use last 4 chars of peer id as room code
+      roomCode=id.slice(-4).toUpperCase();
+      localId='p0';
+      const ci=0;
+      players[localId]=makePlayer(localId,name,ci,200,600,true);
+      document.getElementById('room-code-text').textContent=roomCode;
+      document.getElementById('room-display').style.display='block';
+      document.getElementById('join-input').style.display='none';
+      setConnecting(false);
+      document.getElementById('lobby-btn').textContent='START GAME';
+      document.getElementById('lobby-btn').onclick=hostStart;
+      // Store full peer id for joining
+      window._hostPeerId=id;
+      refreshLobbyList();
+    });
+  } else {
+    // Join
+    const code=document.getElementById('code-input').value.trim().toUpperCase();
+    if(code.length!==4){ setError('Enter a 4-character room code'); return; }
+    isHost=false;
+    isOnline=true;
+    setConnecting(true);
+    // We need to find the host's peer id. Since peer IDs are generated, 
+    // we embed them in the room code by using the peer ID directly.
+    // Simple approach: host peer ID = code (user shares full ID)
+    // But we use last 4 for display and store full ID separately...
+    // For simplicity: room code IS the peer ID (user shares it)
+    // Let's make room code = full peer id for simplicity
+    initPeer(myId=>{
+      localId=myId; // temp, will be overwritten by welcome
+      const conn=peer.connect(document.getElementById('code-input').value.trim(),{metadata:{name}});
+      connections.push(conn);
+      conn.on('open',()=>{
+        sendTo(conn,{type:'join',name});
+        setupConn(conn);
+      });
+      conn.on('error',e=>setError('Could not connect: '+e));
+      setTimeout(()=>{ if(!players[localId]&&gameState==='lobby') setError('Connection timed out'); setConnecting(false); },8000);
+    });
+  }
+}
+
+function hostStart(){
+  if(Object.keys(players).length<1){ setError('Need at least 1 player'); return; }
+  worldSeed=Math.floor(Math.random()*99999);
+  scores={};
+  round=1;
+  broadcast({type:'startgame',seed:worldSeed,round:1,scores:{}});
+  startRound();
+}
+
+function startSolo(){
+  isHost=false;
+  isOnline=false;
+  localId='p0';
+  players={};
+  players['p0']=makePlayer('p0','PLAYER 1',0,200,600,true);
+  players['p1']=makePlayer('p1','PLAYER 2',1,260,600,true); // local 2P
+  worldSeed=Math.floor(Math.random()*99999);
+  scores={};
+  round=1;
+  startRound();
+}
+
+function playAgain(){
+  document.getElementById('gameover').style.display='none';
+  scores={};
+  round=1;
+  if(isHost||!isOnline){
+    worldSeed=Math.floor(Math.random()*99999);
+    if(isOnline) broadcast({type:'startgame',seed:worldSeed,round:1,scores:{}});
+    startRound();
+  }
+}
+
+function backToMenu(){
+  gameState='menu';
+  document.getElementById('menu').style.display='flex';
+  document.getElementById('lobby').style.display='none';
+  document.getElementById('gameover').style.display='none';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('spectator-label').style.display='none';
+  players={};
+  powerups=[];
+  particles=[];
+  if(peer){ try{peer.destroy();}catch(e){} peer=null; }
+  connections=[];
+  isOnline=false; isHost=false;
+}
+
+function refreshLobbyList(){
+  const ul=document.getElementById('playerlist');
+  ul.innerHTML='';
+  Object.values(players).forEach((p,i)=>{
+    const li=document.createElement('li');
+    li.textContent=(p.isLocal?'★ ':'')+p.name+(p.id===localId?' (you)':'');
+    li.style.borderColor=COLORS[p.colorIdx];
+    li.style.color=COLORS[p.colorIdx];
+    ul.appendChild(li);
+  });
+}
+
+// Fix room code display for host: show full peer ID for joining
+// Override: when host joins, room code = full peer ID
+function showHost_fixed(){
+  showHost();
+}
+
+// When host: show full peer id as the "code"
+const _origInitPeer=initPeer;
+// Patch: room code IS full peer id (shown fully for host)
+// Update host start to show full ID
+function patchHostDisplay(id){
+  document.getElementById('room-code-text').textContent=id;
+  document.getElementById('room-code-text').style.fontSize='0.9rem';
+  document.getElementById('room-code-text').style.letterSpacing='0.05em';
+}
+
+// Re-wire host to show full peer id
+const origLobbyAction=lobbyAction;
+// Already handled above - room code text is set to last 4 chars but join needs full id
+// Let's fix: show full peer ID in the room code display
+// Patch the peer open callback
+window.addEventListener('load',()=>{
+  // Re-define lobbyAction to show full ID
+  window.lobbyAction=function(){
+    const name=document.getElementById('name-input').value.trim().toUpperCase()||'PLAYER';
+    if(lobbyMode==='host'){
+      isHost=true; isOnline=true;
+      setConnecting(true);
+      initPeer(id=>{
+        roomCode=id;
+        localId='p0';
+        players['p0']=makePlayer('p0',name,0,200,600,true);
+        document.getElementById('room-code-text').textContent=id;
+        document.getElementById('room-code-text').style.fontSize='0.75rem';
+        document.getElementById('room-code-text').style.letterSpacing='0.05em';
+        document.getElementById('room-code-text').style.wordBreak='break-all';
+        document.getElementById('room-display').style.display='block';
+        document.getElementById('join-input').style.display='none';
+        setConnecting(false);
+        document.getElementById('lobby-btn').textContent='START GAME';
+        document.getElementById('lobby-btn').onclick=hostStart;
+        refreshLobbyList();
+      });
+    } else {
+      const code=document.getElementById('code-input').value.trim();
+      if(!code){ setError('Enter the room ID'); return; }
+      isHost=false; isOnline=true;
+      setConnecting(true);
+      initPeer(myId=>{
+        localId=myId;
+        const conn=peer.connect(code,{metadata:{name}});
+        connections=[conn];
+        conn.on('open',()=>{ sendTo(conn,{type:'join',name}); setupConn(conn); });
+        conn.on('error',e=>{ setError('Could not connect'); setConnecting(false); });
+        setTimeout(()=>{ if(gameState==='lobby'){ setError('Timed out'); setConnecting(false); }},8000);
+      });
+    }
+  };
+
+  // Also update join input placeholder
+  document.getElementById('code-input').placeholder='Paste room ID';
+  document.getElementById('code-input').style.width='320px';
+  document.getElementById('code-input').removeAttribute('maxlength');
+  document.getElementById('code-input').oninput=null;
+});
+
+gameState='lobby_init'; // will be set to 'menu' below
+gameState='menu';
+requestAnimationFrame(ts=>{ lastTime=ts; requestAnimationFrame(gameLoop); });
+</script>
+</body>
+</html>
